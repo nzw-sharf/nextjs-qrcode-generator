@@ -5,9 +5,9 @@ import QRCode from 'qrcode';
 export const config = {
   api: {
     bodyParser: {
-      sizeLimit: '1mb'
-    }
-  }
+      sizeLimit: '1mb',
+    },
+  },
 };
 
 export default async function handler(req, res) {
@@ -36,23 +36,27 @@ export default async function handler(req, res) {
   }
 
   try {
-    const pngBuffers = await Promise.all(lines.map(async (txt) => {
-      return await QRCode.toBuffer(txt, { type: 'png', errorCorrectionLevel: 'M', margin: 1, width: 300 });
-    }));
+    const pngBuffers = await Promise.all(
+      lines.map(async (txt) =>
+        QRCode.toBuffer(txt, {
+          type: 'png',
+          errorCorrectionLevel: 'M',
+          margin: 1,
+          width: 120,
+        })
+      )
+    );
 
     const doc = new PDFDocument({ autoFirstPage: false });
     doc.addPage({ size: 'A4', margin: 20 });
 
-    const pageWidth = 595.28;
-    const pageHeight = 841.89;
-
+    const pageWidth = 595.28; // A4 width in points
+    const pageHeight = 841.89; // A4 height in points
     const margin = 20;
-    const availableWidth = pageWidth - margin * 2;
-
-    const qrSize = 120;
-    const gap = 16;
-    const cols = Math.floor((availableWidth + gap) / (qrSize + gap));
-    const xStart = margin + (availableWidth - (cols * qrSize + (cols - 1) * gap)) / 2;
+    const qrSize = 70; // each QR code size
+    const gap = 20;
+    const cols = 6; // exactly 6 in a row
+    const xStart = margin + (pageWidth - margin * 2 - (cols * qrSize + (cols - 1) * gap)) / 2;
     let x = xStart;
     let y = margin;
     let col = 0;
@@ -60,19 +64,26 @@ export default async function handler(req, res) {
     for (let i = 0; i < pngBuffers.length; i++) {
       const buf = pngBuffers[i];
 
-      if (y + qrSize > pageHeight - margin) {
+      // Add new page if needed
+      if (y + qrSize + 30 > pageHeight - margin) {
         doc.addPage({ size: 'A4', margin: 20 });
         y = margin;
       }
 
+      // Border
+      doc.rect(x - 2, y - 2, qrSize + 4, qrSize + 4).stroke();
+
+      // QR Image
       doc.image(buf, x, y, { width: qrSize, height: qrSize });
-      doc.fontSize(10).text(lines[i], x, y + qrSize + 6, { width: qrSize, align: 'center' });
+
+      // Label
+      doc.fontSize(8).text(lines[i], x, y + qrSize + 5, { width: qrSize, align: 'center' });
 
       col++;
       if (col >= cols) {
         col = 0;
         x = xStart;
-        y += qrSize + 28;
+        y += qrSize + 30;
       } else {
         x += qrSize + gap;
       }
@@ -84,7 +95,6 @@ export default async function handler(req, res) {
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader('Content-Disposition', 'attachment; filename=qr_codes.pdf');
     res.send(pdfBuffer);
-
   } catch (err) {
     console.error(err);
     res.status(500).send('Failed to generate PDF');
