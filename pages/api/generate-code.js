@@ -32,14 +32,14 @@ export default async function handler(req, res) {
     return res.status(400).send('No numbers provided');
   }
   // Optional: for barcode, ensure digits only
-  if (codeType === 'qrcode') {
-    for (const line of lines) {
-      if (!/^\d+$/.test(line)) {
-        res.status(400).send('All lines must contain only digits for QR Code');
-        return;
-      }
-    }
-  }
+  // if (codeType === 'qrcode') {
+  //   for (const line of lines) {
+  //     if (!/^\d+$/.test(line)) {
+  //       res.status(400).send('All lines must contain only digits for QR Code');
+  //       return;
+  //     }
+  //   }
+  // }
   try {
     const imgBuffers = await Promise.all(
       lines.map(async (txt) => {
