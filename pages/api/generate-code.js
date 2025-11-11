@@ -35,7 +35,7 @@ export default async function handler(req, res) {
     const imgBuffers = await Promise.all(
       lines.map(async (txt) => {
         if (codeType === 'qrcode') {
-          return QRCode.toBuffer(txt, { type: 'png', width: 120, margin: 1 });
+          return QRCode.toBuffer(txt, { type: 'png', width: 90, margin: 1 });
         } else {
           return bwipjs.toBuffer({
             bcid: 'code128',
@@ -59,46 +59,64 @@ export default async function handler(req, res) {
     doc.addPage({ size: 'A4', margin: 20 });
     const pageWidth = 595.28;
     const pageHeight = 841.89;
-    const margin = 20;
+    const margin = 10;
 
     if (codeType === 'qrcode') {
-      // === QR layout (unchanged)
-      const qrSize = 70;
-      const gap = 20;
-      const cols = 6;
-      const xStart = margin + (pageWidth - margin * 2 - (cols * qrSize + (cols - 1) * gap)) / 2;
+      // === QR layout
+      const qrSize = 45;        // size of each QR code
+      const gapX = 55;          // horizontal gap between QR codes
+      const gapY = 18;          // vertical gap between QR codes + text
+      const cols = 6;           // number of columns
+      const rows = 13;          // number of rows per page
+      let xStart = 20;
+      let yStart = margin;
 
       let x = xStart;
-      let y = margin;
+      let y = yStart;
       let col = 0;
+      let row = 0;
 
       for (let i = 0; i < imgBuffers.length; i++) {
         const buf = imgBuffers[i];
-        if (y + qrSize + 30 > pageHeight - margin) {
-          doc.addPage({ size: 'A4', margin: 20 });
-          y = margin;
+
+        // Add new page if exceeding rows
+        if (row >= rows) {
+          doc.addPage({ size: 'A4', margin: margin });
+          x = xStart;
+          y = yStart;
+          col = 0;
+          row = 0;
         }
-        doc.rect(x - 2, y - 2, qrSize + 4, qrSize + 4).stroke();
+
+        // Draw light black border
+        doc.strokeColor('#acacac');
+        doc.rect(x - 5, y - 1, qrSize + 10, qrSize + 11).stroke();
+
+        // Draw QR code
         doc.image(buf, x, y, { width: qrSize, height: qrSize });
-        doc.fontSize(8).text(lines[i], x, y + qrSize + 5, { width: qrSize, align: 'center' });
+
+        // Draw sequence text
+        doc.fontSize(7).text(lines[i], x, y + qrSize + 1, { width: qrSize, align: 'center' });
 
         col++;
         if (col >= cols) {
           col = 0;
           x = xStart;
-          y += qrSize + 30;
+          y += qrSize + gapY;
+          row++;
         } else {
-          x += qrSize + gap;
+          x += qrSize + gapX;
         }
       }
-    } else {
+    }
+    else {
       // === Barcode layout: 4 columns (30% 20% 30% 20%)
       const usableWidth = pageWidth - margin * 2;
       const colWidths = {
-        barcode1: usableWidth * 0.3,
-        number1: usableWidth * 0.2,
-        barcode2: usableWidth * 0.3,
-        number2: usableWidth * 0.2,
+        barcode1: usableWidth * 0.2,
+        number1: usableWidth * 0.3,
+        barcode2: usableWidth * 0.2,
+        number2: usableWidth * 0.3,
       };
 
       const barcodeHeight = 40;
@@ -117,7 +135,7 @@ export default async function handler(req, res) {
         const buf1 = imgBuffers[i];
         doc.rect(margin - 2, y - 2, colWidths.barcode1 + 4, barcodeHeight + 4).stroke();
         doc.image(buf1, margin, y, { width: colWidths.barcode1, height: barcodeHeight });
-        doc.fontSize(10).text(lines[i], margin + colWidths.barcode1, y + 12, {
+        doc.fontSize(26).text(lines[i], margin + colWidths.barcode1, y + 12, {
           width: colWidths.number1,
           align: 'center',
         });
@@ -127,7 +145,7 @@ export default async function handler(req, res) {
           const x2 = margin + colWidths.barcode1 + colWidths.number1;
           doc.rect(x2 - 2, y - 2, colWidths.barcode2 + 4, barcodeHeight + 4).stroke();
           doc.image(buf2, x2, y, { width: colWidths.barcode2, height: barcodeHeight });
-          doc.fontSize(10).text(lines[i + 1], x2 + colWidths.barcode2, y + 12, {
+          doc.fontSize(26).text(lines[i + 1], x2 + colWidths.barcode2, y + 12, {
             width: colWidths.number2,
             align: 'center',
           });
