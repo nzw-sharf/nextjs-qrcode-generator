@@ -1,5 +1,4 @@
 import PDFDocument from 'pdfkit';
-import getStream from 'get-stream';
 import QRCode from 'qrcode';
 import bwipjs from 'bwip-js';
 
@@ -25,50 +24,45 @@ export default async function handler(req, res) {
 
   const lines = number_sequence
     .split(/\r?\n/)
-    .map(l => l.trim())
-    .filter(l => l.length > 0);
+    .map((l) => l.trim())
+    .filter((l) => l.length > 0);
 
   if (lines.length === 0) {
     return res.status(400).send('No numbers provided');
   }
-  // Optional: for barcode, ensure digits only
-  // if (codeType === 'qrcode') {
-  //   for (const line of lines) {
-  //     if (!/^\d+$/.test(line)) {
-  //       res.status(400).send('All lines must contain only digits for QR Code');
-  //       return;
-  //     }
-  //   }
-  // }
+
   try {
     const imgBuffers = await Promise.all(
       lines.map(async (txt) => {
         if (codeType === 'qrcode') {
           return QRCode.toBuffer(txt, { type: 'png', width: 120, margin: 1 });
         } else {
-          // Barcode buffer
           return bwipjs.toBuffer({
             bcid: 'code128',
             text: txt,
             scale: 3,
             height: 14,
-            includetext: false, // text will be drawn next to barcode
+            includetext: false,
             backgroundcolor: 'FFFFFF',
           });
         }
       })
     );
 
-    // PDF setup
-    const doc = new PDFDocument({ autoFirstPage: false });
-    doc.addPage({ size: 'A4', margin: 20 });
+    // Tell browser this is a PDF file to download
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="${codeType}_codes.pdf"`);
 
-    const pageWidth = 595.28; // A4 width
-    const pageHeight = 841.89; // A4 height
+    const doc = new PDFDocument({ autoFirstPage: false });
+    doc.pipe(res); // <— Stream directly to response (no 4 MB buffer limit)
+
+    doc.addPage({ size: 'A4', margin: 20 });
+    const pageWidth = 595.28;
+    const pageHeight = 841.89;
     const margin = 20;
 
     if (codeType === 'qrcode') {
-      // QR code layout (keep as before)
+      // === QR layout (unchanged)
       const qrSize = 70;
       const gap = 20;
       const cols = 6;
@@ -80,12 +74,10 @@ export default async function handler(req, res) {
 
       for (let i = 0; i < imgBuffers.length; i++) {
         const buf = imgBuffers[i];
-
         if (y + qrSize + 30 > pageHeight - margin) {
           doc.addPage({ size: 'A4', margin: 20 });
           y = margin;
         }
-
         doc.rect(x - 2, y - 2, qrSize + 4, qrSize + 4).stroke();
         doc.image(buf, x, y, { width: qrSize, height: qrSize });
         doc.fontSize(8).text(lines[i], x, y + qrSize + 5, { width: qrSize, align: 'center' });
@@ -100,11 +92,8 @@ export default async function handler(req, res) {
         }
       }
     } else {
-      // Barcode layout: 4 columns per row (30%-20%-30%-20%)
-      const pageWidth = 595.28; // A4 width
-      const margin = 20;
+      // === Barcode layout: 4 columns (30% 20% 30% 20%)
       const usableWidth = pageWidth - margin * 2;
-
       const colWidths = {
         barcode1: usableWidth * 0.3,
         number1: usableWidth * 0.2,
@@ -113,9 +102,8 @@ export default async function handler(req, res) {
       };
 
       const barcodeHeight = 40;
-      const gapY = 20; // space between rows
+      const gapY = 20;
       const maxRows = 13;
-
       let y = 20;
       let currentRow = 1;
 
@@ -126,19 +114,23 @@ export default async function handler(req, res) {
           currentRow = 1;
         }
 
-        // First barcode
         const buf1 = imgBuffers[i];
         doc.rect(margin - 2, y - 2, colWidths.barcode1 + 4, barcodeHeight + 4).stroke();
         doc.image(buf1, margin, y, { width: colWidths.barcode1, height: barcodeHeight });
-        doc.fontSize(10).text(lines[i], margin + colWidths.barcode1, y + 12, { width: colWidths.number1, align: 'center' });
+        doc.fontSize(10).text(lines[i], margin + colWidths.barcode1, y + 12, {
+          width: colWidths.number1,
+          align: 'center',
+        });
 
-        // Second barcode if exists
         if (i + 1 < lines.length) {
           const buf2 = imgBuffers[i + 1];
           const x2 = margin + colWidths.barcode1 + colWidths.number1;
           doc.rect(x2 - 2, y - 2, colWidths.barcode2 + 4, barcodeHeight + 4).stroke();
           doc.image(buf2, x2, y, { width: colWidths.barcode2, height: barcodeHeight });
-          doc.fontSize(10).text(lines[i + 1], x2 + colWidths.barcode2, y + 12, { width: colWidths.number2, align: 'center' });
+          doc.fontSize(10).text(lines[i + 1], x2 + colWidths.barcode2, y + 12, {
+            width: colWidths.number2,
+            align: 'center',
+          });
         }
 
         y += barcodeHeight + gapY;
@@ -146,15 +138,9 @@ export default async function handler(req, res) {
       }
     }
 
-
-    doc.end();
-    const pdfBuffer = await getStream.buffer(doc);
-
-    res.setHeader('Content-Type', 'application/pdf');
-    res.setHeader('Content-Disposition', `inline; filename=${codeType}_codes.pdf`);
-    res.send(pdfBuffer);
+    doc.end(); // Finish PDF stream
   } catch (err) {
-    console.error(err);
+    console.error('PDF Generation Error:', err);
     res.status(500).send('Failed to generate PDF');
   }
 }
