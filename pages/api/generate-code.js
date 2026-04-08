@@ -63,11 +63,11 @@ export default async function handler(req, res) {
 
     if (codeType === 'qrcode') {
       // === QR layout
-      const qrSize = 45;        // size of each QR code
-      const gapX = 55;          // horizontal gap between QR codes
-      const gapY = 18;          // vertical gap between QR codes + text
-      const cols = 6;           // number of columns
-      const rows = 13;          // number of rows per page
+      const qrSize = 70;        // size of each QR code
+      const gapX = 50;          // horizontal gap between QR codes
+      const gapY = 48;          // vertical gap between QR codes + text
+      const cols = 5;           // number of columns
+      const rows = 7;          // number of rows per page
       let xStart = 20;
       let yStart = margin;
 
@@ -96,7 +96,7 @@ export default async function handler(req, res) {
         doc.image(buf, x, y, { width: qrSize, height: qrSize });
 
         // Draw sequence text
-        doc.fontSize(7).text(lines[i], x, y + qrSize + 1, { width: qrSize, align: 'center' });
+        doc.fontSize(8).text(lines[i], x, y + qrSize + 1, { width: qrSize, align: 'center' });
 
         col++;
         if (col >= cols) {
