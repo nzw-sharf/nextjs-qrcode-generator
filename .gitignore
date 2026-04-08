@@ -2,3 +2,4 @@
 .next
 .env
 *.log
+/.kiro

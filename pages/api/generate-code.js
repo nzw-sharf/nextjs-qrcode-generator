@@ -2,6 +2,19 @@ import PDFDocument from 'pdfkit';
 import QRCode from 'qrcode';
 import bwipjs from 'bwip-js';
 
+// === Pure grid math helper (no PDFDocument dependency) ===
+export function computeGrid() {
+  const PAGE_W = 595.28;
+  const PAGE_H = 841.89;
+  const COLS   = 5;
+  const ROWS   = 7;
+  const CELL_W = PAGE_W / COLS;
+  const CELL_H = PAGE_H / ROWS;
+  const verticalXs   = [0, 1, 2, 3, 4, 5].map(i => i * CELL_W);
+  const horizontalYs = [0, 1, 2, 3, 4, 5, 6, 7].map(j => j * CELL_H);
+  return { CELL_W, CELL_H, verticalXs, horizontalYs };
+}
+
 export const config = {
   api: {
     bodyParser: { sizeLimit: '10mb' },
@@ -56,56 +69,90 @@ export default async function handler(req, res) {
     const doc = new PDFDocument({ autoFirstPage: false });
     doc.pipe(res); // <— Stream directly to response (no 4 MB buffer limit)
 
-    doc.addPage({ size: 'A4', margin: 20 });
+    doc.addPage({ size: 'A4', margin: 0 });
     const pageWidth = 595.28;
     const pageHeight = 841.89;
     const margin = 10;
 
     if (codeType === 'qrcode') {
-      // === QR layout
-      const qrSize = 70;        // size of each QR code
-      const gapX = 50;          // horizontal gap between QR codes
-      const gapY = 48;          // vertical gap between QR codes + text
-      const cols = 5;           // number of columns
-      const rows = 7;          // number of rows per page
-      let xStart = 20;
-      let yStart = margin;
+      // === Grid constants (via pure helper)
+      const PAGE_W = 595.28;
+      const PAGE_H = 841.89;
+      const COLS   = 5;
+      const ROWS   = 7;
+      const { CELL_W, CELL_H, verticalXs, horizontalYs } = computeGrid();
+      // PAGE_W, PAGE_H, COLS, ROWS kept for drawCutLines/drawCell closures
 
-      let x = xStart;
-      let y = yStart;
+      // === Helper: draw cut lines on the current page
+      function drawCutLines(doc) {
+        doc.strokeColor('#000000').lineWidth(0.5);
+        for (const x of verticalXs) {
+          doc.moveTo(x, 0).lineTo(x, PAGE_H).stroke();
+        }
+        for (const y of horizontalYs) {
+          doc.moveTo(0, y).lineTo(PAGE_W, y).stroke();
+        }
+      }
+
+      // === Helper: draw a single QR cell at grid position (col, row)
+      function drawCell(doc, buf, label, col, row) {
+        const x0 = col * CELL_W;
+        const y0 = row * CELL_H;
+        const cellPadding = 6;   // gap between cut line and cell border
+        const innerPadding = 6;  // gap between cell border and QR image
+        const labelHeight = 12;
+        const labelGap = 3;
+
+        // Cell border sits inside the cut lines with cellPadding on each side
+        const borderX = x0 + cellPadding;
+        const borderY = y0 + cellPadding;
+        const borderW = CELL_W - 2 * cellPadding;
+        const borderH = CELL_H - 2 * cellPadding;
+
+        // Draw cell border
+        doc.save()
+           .strokeColor('#9f9f9f').lineWidth(0.5)
+           .rect(borderX, borderY, borderW, borderH)
+           .stroke()
+           .restore();
+
+        // QR fits within the border with innerPadding on each side
+        const maxQrW = borderW - 2 * innerPadding;
+        const maxQrH = borderH - 2 * innerPadding - labelGap - labelHeight;
+        const qrSize = Math.min(maxQrW, maxQrH);
+        const qrX = borderX + (borderW - qrSize) / 2;
+        const qrY = borderY + innerPadding;
+        const labelY = qrY + qrSize + labelGap;
+
+        doc.image(buf, qrX, qrY, { width: qrSize, height: qrSize });
+        doc.fontSize(8).text(label, borderX + innerPadding, labelY, { width: maxQrW, align: 'center' });
+      }
+
+      // === QR layout: 5×7 grid with cut lines
       let col = 0;
       let row = 0;
+
+      // Draw cut lines on the first page (already added above)
+      drawCutLines(doc);
 
       for (let i = 0; i < imgBuffers.length; i++) {
         const buf = imgBuffers[i];
 
-        // Add new page if exceeding rows
-        if (row >= rows) {
-          doc.addPage({ size: 'A4', margin: margin });
-          x = xStart;
-          y = yStart;
-          col = 0;
-          row = 0;
+        // When a full page is filled, add a new page and draw cut lines
+        if (col === 0 && row === 0 && i > 0) {
+          doc.addPage({ size: 'A4', margin: 0 });
+          drawCutLines(doc);
         }
 
-        // Draw light black border
-        doc.strokeColor('#acacac');
-        doc.rect(x - 5, y - 1, qrSize + 10, qrSize + 11).stroke();
-
-        // Draw QR code
-        doc.image(buf, x, y, { width: qrSize, height: qrSize });
-
-        // Draw sequence text
-        doc.fontSize(8).text(lines[i], x, y + qrSize + 1, { width: qrSize, align: 'center' });
+        drawCell(doc, buf, lines[i], col, row);
 
         col++;
-        if (col >= cols) {
+        if (col >= COLS) {
           col = 0;
-          x = xStart;
-          y += qrSize + gapY;
           row++;
-        } else {
-          x += qrSize + gapX;
+          if (row >= ROWS) {
+            row = 0;
+          }
         }
       }
     }
