@@ -53,6 +53,7 @@ export default function CodeGenerator() {
           onClick={() => setCodeType('qrcode')}
           style={{
             padding: '10px 20px',
+            marginRight: 10,
             cursor: 'pointer',
             backgroundColor: codeType === 'qrcode' ? '#4f46e5' : '#e5e7eb',
             color: codeType === 'qrcode' ? '#fff' : '#000',
@@ -61,6 +62,20 @@ export default function CodeGenerator() {
           }}
         >
           QR Code
+        </button>
+        <button
+          type="button"
+          onClick={() => setCodeType('smallQrcode')}
+          style={{
+            padding: '10px 20px',
+            cursor: 'pointer',
+            backgroundColor: codeType === 'smallQrcode' ? '#4f46e5' : '#e5e7eb',
+            color: codeType === 'smallQrcode' ? '#fff' : '#000',
+            border: 'none',
+            borderRadius: '5px',
+          }}
+        >
+         Small QR Code
         </button>
       </div>
 
