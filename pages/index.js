@@ -62,7 +62,8 @@ export default function CodeGenerator() {
           }}
         >
           QR Code
-        </button>
+        </button> 
+        
         <button
           type="button"
           onClick={() => setCodeType('smallQrcode')}

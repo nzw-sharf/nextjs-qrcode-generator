@@ -207,6 +207,7 @@ export default async function handler(req, res) {
         doc.fontSize(8).text(label, borderX + innerPadding, labelY, { width: maxQrW, align: 'center' });
       }
 
+      
       let col = 0;
       let row = 0;
 
