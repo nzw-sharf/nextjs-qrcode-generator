@@ -1,5 +1,12 @@
 import { useState } from 'react';
 
+const TABS = [
+  { type: 'barcode', label: 'Barcode' },
+  { type: 'qrcode', label: 'QR Code' },
+  { type: 'smallQrcode', label: 'Small QR Code' },
+  { type: 'bigQrcode', label: 'Big QR Code' },
+];
+
 export default function CodeGenerator() {
   const [sequence, setSequence] = useState('');
   const [codeType, setCodeType] = useState('barcode');
@@ -9,19 +16,23 @@ export default function CodeGenerator() {
     e.preventDefault();
     setLoading(true);
 
-    const res = await fetch('/api/generate-code', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ number_sequence: sequence, codeType }),
-    });
+    try {
+      const res = await fetch('/api/generate-code', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ number_sequence: sequence, codeType }),
+      });
 
-    if (res.ok) {
-      const blob = await res.blob();
-      const url = window.URL.createObjectURL(blob);
-      window.open(url, '_blank');
-    } else {
-      const data = await res.text();
-      alert(data || 'Error generating PDF');
+      if (res.ok) {
+        const blob = await res.blob();
+        const url = window.URL.createObjectURL(blob);
+        window.open(url, '_blank');
+      } else {
+        const data = await res.text();
+        alert(data || 'Error generating PDF');
+      }
+    } catch (err) {
+      alert('Network error while generating PDF');
     }
 
     setLoading(false);
@@ -32,52 +43,24 @@ export default function CodeGenerator() {
       <h1>Code Generator</h1>
 
       {/* Button Tabs */}
-      <div style={{ marginBottom: 20 }}>
-        <button
-          type="button"
-          onClick={() => setCodeType('barcode')}
-          style={{
-            padding: '10px 20px',
-            marginRight: 10,
-            cursor: 'pointer',
-            backgroundColor: codeType === 'barcode' ? '#4f46e5' : '#e5e7eb',
-            color: codeType === 'barcode' ? '#fff' : '#000',
-            border: 'none',
-            borderRadius: '5px',
-          }}
-        >
-          Barcode
-        </button>
-        <button
-          type="button"
-          onClick={() => setCodeType('qrcode')}
-          style={{
-            padding: '10px 20px',
-            marginRight: 10,
-            cursor: 'pointer',
-            backgroundColor: codeType === 'qrcode' ? '#4f46e5' : '#e5e7eb',
-            color: codeType === 'qrcode' ? '#fff' : '#000',
-            border: 'none',
-            borderRadius: '5px',
-          }}
-        >
-          QR Code
-        </button> 
-        
-        <button
-          type="button"
-          onClick={() => setCodeType('smallQrcode')}
-          style={{
-            padding: '10px 20px',
-            cursor: 'pointer',
-            backgroundColor: codeType === 'smallQrcode' ? '#4f46e5' : '#e5e7eb',
-            color: codeType === 'smallQrcode' ? '#fff' : '#000',
-            border: 'none',
-            borderRadius: '5px',
-          }}
-        >
-         Small QR Code
-        </button>
+      <div style={{ marginBottom: 20, display: 'flex', flexWrap: 'wrap', gap: 10 }}>
+        {TABS.map((tab) => (
+          <button
+            key={tab.type}
+            type="button"
+            onClick={() => setCodeType(tab.type)}
+            style={{
+              padding: '10px 20px',
+              cursor: 'pointer',
+              backgroundColor: codeType === tab.type ? '#4f46e5' : '#e5e7eb',
+              color: codeType === tab.type ? '#fff' : '#000',
+              border: 'none',
+              borderRadius: '5px',
+            }}
+          >
+            {tab.label}
+          </button>
+        ))}
       </div>
 
       <form onSubmit={handleSubmit}>

@@ -31,8 +31,10 @@ export default async function handler(req, res) {
     return res.status(400).send('Missing number_sequence in request body');
   }
 
-  if (!['qrcode', 'barcode', 'smallQrcode'].includes(codeType)) {
-    return res.status(400).send('Invalid codeType. Must be "qrcode" or "barcode" or "small Qrcode"');
+  if (!['qrcode', 'barcode', 'smallQrcode', 'bigQrcode'].includes(codeType)) {
+    return res
+      .status(400)
+      .send('Invalid codeType. Must be "qrcode", "barcode", "smallQrcode" or "bigQrcode"');
   }
 
   const lines = number_sequence
@@ -47,8 +49,13 @@ export default async function handler(req, res) {
   try {
     const imgBuffers = await Promise.all(
       lines.map(async (txt) => {
-        if (codeType === 'qrcode' || codeType === 'smallQrcode') {
-          return QRCode.toBuffer(txt, { type: 'png', width: 90, margin: 1 });
+        if (codeType === 'qrcode' || codeType === 'smallQrcode' || codeType === 'bigQrcode') {
+          return QRCode.toBuffer(txt, {
+            type: 'png',
+            // Big QR is drawn at ~170pt, so it needs a higher-res source image
+            width: codeType === 'bigQrcode' ? 500 : 90,
+            margin: 1,
+          });
         } else {
           return bwipjs.toBuffer({
             bcid: 'code128',
@@ -81,7 +88,6 @@ export default async function handler(req, res) {
       const COLS   = 5;
       const ROWS   = 7;
       const { CELL_W, CELL_H, verticalXs, horizontalYs } = computeGrid();
-      // PAGE_W, PAGE_H, COLS, ROWS kept for drawCutLines/drawCell closures
 
       // === Helper: draw cut lines on the current page
       function drawCutLines(doc) {
@@ -155,7 +161,7 @@ export default async function handler(req, res) {
           }
         }
       }
-    } else if(codeType === 'smallQrcode') {
+    } else if (codeType === 'smallQrcode') {
       // === Small QR grid: 6 cols × 13 rows = 78 cells per page
       const PAGE_W = 595.28;
       const PAGE_H = 841.89;
@@ -207,7 +213,6 @@ export default async function handler(req, res) {
         doc.fontSize(8).text(label, borderX + innerPadding, labelY, { width: maxQrW, align: 'center' });
       }
 
-      
       let col = 0;
       let row = 0;
 
@@ -230,8 +235,85 @@ export default async function handler(req, res) {
           }
         }
       }
-    }  else {
-      // === Barcode layout: 4 columns (30% 20% 30% 20%)
+    } else if (codeType === 'bigQrcode') {
+      // === Big QR grid: 3 cols × 4 rows = 12 cells per page
+      const PAGE_W = 595.28;
+      const PAGE_H = 841.89;
+      const COLS   = 3;
+      const ROWS   = 4;
+      const CELL_W = PAGE_W / COLS;
+      const CELL_H = PAGE_H / ROWS;
+
+      const verticalXs   = Array.from({ length: COLS + 1 }, (_, i) => i * CELL_W);
+      const horizontalYs = Array.from({ length: ROWS + 1 }, (_, j) => j * CELL_H);
+
+      function drawCutLines(doc) {
+        doc.strokeColor('#000000').lineWidth(0.5);
+        for (const x of verticalXs) {
+          doc.moveTo(x, 0).lineTo(x, PAGE_H).stroke();
+        }
+        for (const y of horizontalYs) {
+          doc.moveTo(0, y).lineTo(PAGE_W, y).stroke();
+        }
+      }
+
+      function drawCell(doc, buf, label, col, row) {
+        const x0 = col * CELL_W;
+        const y0 = row * CELL_H;
+        const cellPadding = 10;   // gap between cut line and cell border
+        const innerPadding = 10;  // gap between cell border and QR image
+        const labelHeight = 16;
+        const labelGap = 4;
+
+        const borderX = x0 + cellPadding;
+        const borderY = y0 + cellPadding;
+        const borderW = CELL_W - 2 * cellPadding;
+        const borderH = CELL_H - 2 * cellPadding;
+
+        doc.save()
+           .strokeColor('#9f9f9f').lineWidth(0.5)
+           .rect(borderX, borderY, borderW, borderH)
+           .stroke()
+           .restore();
+
+        const maxQrW = borderW - 2 * innerPadding;
+        const maxQrH = borderH - 2 * innerPadding - labelGap - labelHeight;
+        const qrSize = Math.min(maxQrW, maxQrH);
+        const qrX = borderX + (borderW - qrSize) / 2;
+        const qrY = borderY + innerPadding + (maxQrH - qrSize) / 2;
+        const labelY = borderY + borderH - innerPadding - labelHeight + 2;
+
+        doc.image(buf, qrX, qrY, { width: qrSize, height: qrSize });
+        doc.fontSize(12).text(label, borderX + innerPadding, labelY, {
+          width: maxQrW,
+          align: 'center',
+        });
+      }
+
+      let col = 0;
+      let row = 0;
+
+      drawCutLines(doc);
+
+      for (let i = 0; i < imgBuffers.length; i++) {
+        if (col === 0 && row === 0 && i > 0) {
+          doc.addPage({ size: 'A4', margin: 0 });
+          drawCutLines(doc);
+        }
+
+        drawCell(doc, imgBuffers[i], lines[i], col, row);
+
+        col++;
+        if (col >= COLS) {
+          col = 0;
+          row++;
+          if (row >= ROWS) {
+            row = 0;
+          }
+        }
+      }
+    } else {
+      // === Barcode layout: 4 columns (20% 30% 20% 30%)
       const usableWidth = pageWidth - margin * 2;
       const colWidths = {
         barcode1: usableWidth * 0.2,
